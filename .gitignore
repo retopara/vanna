@@ -20,3 +20,6 @@ chroma.sqlite3
 .coverage.*
 milvus.db
 .milvus.db.lock
+
+# 配置文件
+config.yaml

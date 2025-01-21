@@ -399,7 +399,7 @@ class VannaBase(ABC):
 
         message_log = [
             self.system_message(
-                f"You are a helpful data assistant. The user asked the question: '{question}'\n\nThe following is a pandas DataFrame with the results of the query: \n{df.to_markdown()}\n\n"
+                f"You are a helpful data assistant. Always answer in Chinese.The user asked the question: '{question}'\n\nThe following is a pandas DataFrame with the results of the query: \n{df.to_markdown()}\n\n"
             ),
             self.user_message(
                 "Briefly summarize the data based on the question that was asked. Do not respond with any additional explanation beyond the summary." +

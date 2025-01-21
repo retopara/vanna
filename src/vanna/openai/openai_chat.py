@@ -1,6 +1,7 @@
 import os
 
 from openai import OpenAI
+import openai
 
 from ..base import VannaBase
 
@@ -68,43 +69,71 @@ class OpenAI_Chat(VannaBase):
             print(
                 f"Using model {model} for {num_tokens} tokens (approx)"
             )
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=prompt,
-                stop=None,
-                temperature=self.temperature,
-            )
+            try:
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=prompt,
+                    stop=None,
+                    temperature=self.temperature,
+                    timeout=90  # 增加超时时间到90秒
+                )
+                return response.choices[0].message.content
+            except openai.APITimeoutError:
+                # 可以选择重试或返回错误信息
+                print("API请求超时，请稍后重试")
+                raise
         elif kwargs.get("engine", None) is not None:
             engine = kwargs.get("engine", None)
             print(
                 f"Using model {engine} for {num_tokens} tokens (approx)"
             )
-            response = self.client.chat.completions.create(
-                engine=engine,
-                messages=prompt,
-                stop=None,
-                temperature=self.temperature,
-            )
+            try:
+                response = self.client.chat.completions.create(
+                    engine=engine,
+                    messages=prompt,
+                    stop=None,
+                    temperature=self.temperature,
+                    timeout=90  # 增加超时时间到90秒
+                )
+                return response.choices[0].message.content
+            except openai.APITimeoutError:
+                # 可以选择重试或返回错误信息
+                print("API请求超时，请稍后重试")
+                raise
         elif self.config is not None and "engine" in self.config:
             print(
                 f"Using engine {self.config['engine']} for {num_tokens} tokens (approx)"
             )
-            response = self.client.chat.completions.create(
-                engine=self.config["engine"],
-                messages=prompt,
-                stop=None,
-                temperature=self.temperature,
-            )
+            try:
+                response = self.client.chat.completions.create(
+                    engine=self.config["engine"],
+                    messages=prompt,
+                    stop=None,
+                    temperature=self.temperature,
+                    timeout=90  # 增加超时时间到90秒
+                )
+                return response.choices[0].message.content
+            except openai.APITimeoutError:
+                # 可以选择重试或返回错误信息
+                print("API请求超时，请稍后重试")
+                raise
         elif self.config is not None and "model" in self.config:
             print(
                 f"Using model {self.config['model']} for {num_tokens} tokens (approx)"
             )
-            response = self.client.chat.completions.create(
-                model=self.config["model"],
-                messages=prompt,
-                stop=None,
-                temperature=self.temperature,
-            )
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.config["model"],
+                    messages=prompt,
+                    stop=None,
+                    temperature=self.temperature,
+                    timeout=90  # 增加超时时间到90秒
+                )
+                return response.choices[0].message.content
+            except openai.APITimeoutError:
+                # 可以选择重试或返回错误信息
+                print("API请求超时，请稍后重试")
+                raise
         else:
             if num_tokens > 3500:
                 model = "gpt-3.5-turbo-16k"
@@ -112,17 +141,16 @@ class OpenAI_Chat(VannaBase):
                 model = "gpt-3.5-turbo"
 
             print(f"Using model {model} for {num_tokens} tokens (approx)")
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=prompt,
-                stop=None,
-                temperature=self.temperature,
-            )
-
-        # Find the first response from the chatbot that has text in it (some responses may not have text)
-        for choice in response.choices:
-            if "text" in choice:
-                return choice.text
-
-        # If no response with text is found, return the first response's content (which may be empty)
-        return response.choices[0].message.content
+            try:
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=prompt,
+                    stop=None,
+                    temperature=self.temperature,
+                    timeout=90  # 增加超时时间到90秒
+                )
+                return response.choices[0].message.content
+            except openai.APITimeoutError:
+                # 可以选择重试或返回错误信息
+                print("API请求超时，请稍后重试")
+                raise
