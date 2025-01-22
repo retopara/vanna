@@ -630,6 +630,7 @@ class VannaBase(ABC):
         question_sql_list: list,
         ddl_list: list,
         doc_list: list,
+        schema: str = None,
         **kwargs,
     ):
         """
@@ -641,19 +642,7 @@ class VannaBase(ABC):
             ddl_list=["CREATE TABLE customers (id INT, name TEXT, sales DECIMAL)"],
             doc_list=["The customers table contains information about customers and their sales."],
         )
-
         ```
-
-        This method is used to generate a prompt for the LLM to generate SQL.
-
-        Args:
-            question (str): The question to generate SQL for.
-            question_sql_list (list): A list of questions and their corresponding SQL statements.
-            ddl_list (list): A list of DDL statements.
-            doc_list (list): A list of documentation.
-
-        Returns:
-            any: The prompt for the LLM to generate SQL.
         """
 
         if initial_prompt is None:
@@ -678,8 +667,13 @@ class VannaBase(ABC):
             "3. If the provided context is insufficient, please explain why it can't be generated. \n"
             "4. Please use the most relevant table(s). \n"
             "5. If the question has been asked and answered before, please repeat the answer exactly as it was given before. \n"
-            f"6. Ensure that the output SQL is {self.dialect}-compliant and executable, and free of syntax errors. \n"
+            "6. Ignore the schema name in historical searches and only use the table name"
+            "7. When using postgresql dialect, and there are uppercase letters in the table name or column name, always double quote the name to avoid errors."
+            f"8. Ensure that the output SQL is {self.dialect}-compliant and executable, and free of syntax errors. \n"
         )
+
+        if schema:
+            initial_prompt += f"7. Ensure that the output SQL is executed within the schema of {schema}. \n"
 
         message_log = [self.system_message(initial_prompt)]
 
@@ -939,29 +933,20 @@ class VannaBase(ABC):
         user: str = None,
         password: str = None,
         port: int = None,
+        schema: str = None,
         **kwargs
     ):
-
         """
-        Connect to postgres using the psycopg2 connector. This is just a helper function to set [`vn.run_sql`][vanna.base.base.VannaBase.run_sql]
-        **Example:**
-        ```python
-        vn.connect_to_postgres(
-            host="myhost",
-            dbname="mydatabase",
-            user="myuser",
-            password="mypassword",
-            port=5432
-        )
-        ```
+        Connect to postgres using the psycopg2 connector with schema support.
+        
         Args:
-            host (str): The postgres host.
-            dbname (str): The postgres database name.
-            user (str): The postgres user.
-            password (str): The postgres password.
-            port (int): The postgres Port.
+            host (str): The postgres host
+            dbname (str): The postgres database name
+            user (str): The postgres user
+            password (str): The postgres password
+            port (int): The postgres port
+            schema (str, optional): The postgres schema. Defaults to None.
         """
-
         try:
             import psycopg2
             import psycopg2.extras
@@ -1001,9 +986,11 @@ class VannaBase(ABC):
         if not port:
             raise ImproperlyConfigured("Please set your postgres port")
 
-        conn = None
+        if not schema:
+            schema = os.getenv("SCHEMA")
 
-        try:
+        def connect_and_set_schema():
+            """创建连接并设置 schema"""
             conn = psycopg2.connect(
                 host=host,
                 dbname=dbname,
@@ -1012,52 +999,98 @@ class VannaBase(ABC):
                 port=port,
                 **kwargs
             )
-        except psycopg2.Error as e:
-            raise ValidationError(e)
+            
+            # 设置自动提交
+            conn.autocommit = True
+            
+            # 创建游标
+            cur = conn.cursor()
+            
+            # 如果指定了 schema
+            if schema:
+                # 检查 schema 是否存在
+                cur.execute("""
+                    SELECT schema_name 
+                    FROM information_schema.schemata 
+                    WHERE schema_name = %s
+                """, (schema,))
+                
+                if not cur.fetchone():
+                    print(f"Warning: Schema '{schema}' does not exist.")
+                
+                # 设置 search_path
+                cur.execute(f"SET search_path TO {schema}")
+                print(f"Successfully set search_path to schema: {schema}")
+            
+            return conn, cur
 
-        def connect_to_db():
-            return psycopg2.connect(host=host, dbname=dbname,
-                        user=user, password=password, port=port, **kwargs)
-
-
-        def run_sql_postgres(sql: str) -> Union[pd.DataFrame, None]:
+        def run_sql_postgres(sql: str, params=None) -> Union[pd.DataFrame, None]:
             conn = None
+            cur = None
             try:
-                conn = connect_to_db()  # Initial connection attempt
-                cs = conn.cursor()
-                cs.execute(sql)
-                results = cs.fetchall()
-
-                # Create a pandas dataframe from the results
-                df = pd.DataFrame(results, columns=[desc[0] for desc in cs.description])
-                return df
-
-            except psycopg2.InterfaceError as e:
-                # Attempt to reconnect and retry the operation
-                if conn:
-                    conn.close()  # Ensure any existing connection is closed
-                conn = connect_to_db()
-                cs = conn.cursor()
-                cs.execute(sql)
-                results = cs.fetchall()
-
-                # Create a pandas dataframe from the results
-                df = pd.DataFrame(results, columns=[desc[0] for desc in cs.description])
-                return df
+                # 建立连接并设置 schema
+                conn, cur = connect_and_set_schema()
+                
+                # 执行查询
+                if params:
+                    cur.execute(sql, params)
+                else:
+                    cur.execute(sql)
+                
+                # 获取结果
+                if cur.description:  # 如果有返回结果
+                    results = cur.fetchall()
+                    # 创建 pandas dataframe
+                    df = pd.DataFrame(results, columns=[desc[0] for desc in cur.description])
+                    return df
+                return None
 
             except psycopg2.Error as e:
+                print(f"Database error: {str(e)}")
                 if conn:
                     conn.rollback()
-                    raise ValidationError(e)
+                raise ValidationError(e)
 
             except Exception as e:
-                        conn.rollback()
-                        raise e
+                print(f"Error: {str(e)}")
+                if conn:
+                    conn.rollback()
+                raise e
+
+            finally:
+                if cur:
+                    cur.close()
+                if conn:
+                    conn.close()
+
+        # 测试连接并设置 schema
+        try:
+            conn, cur = connect_and_set_schema()
+            if schema:
+                # 验证 schema 设置是否成功
+                cur.execute("SELECT current_schema()")
+                current_schema = cur.fetchone()[0]
+                if current_schema != schema:
+                    print(f"Warning: Current schema is {current_schema}, not {schema}")
+                else:
+                    print(f"Successfully connected to schema: {schema}")
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"Error during connection test: {str(e)}")
+            raise
 
         self.dialect = "PostgreSQL"
         self.run_sql_is_set = True
         self.run_sql = run_sql_postgres
+        self.schema = schema  # 保存 schema 到实例变量
 
+        print(f"PostgreSQL connection established:")
+        print(f"- Host: {host}")
+        print(f"- Database: {dbname}")
+        print(f"- Schema: {schema}")
+        print(f"- User: {user}")
+        print(f"- Port: {port}")
 
     def connect_to_mysql(
         self,
@@ -1501,6 +1534,7 @@ class VannaBase(ABC):
         self.dialect = "T-SQL / Microsoft SQL Server"
         self.run_sql = run_sql_mssql
         self.run_sql_is_set = True
+
     def connect_to_presto(
         self,
         host: str,

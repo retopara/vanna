@@ -327,32 +327,30 @@ class VannaFlaskAPI:
                       type: string
             """
             question = flask.request.args.get("question")
-
+            
             if question is None:
                 return jsonify({"type": "error", "error": "No question provided"})
-
+            
             id = self.cache.generate_id(question=question)
             sql = vn.generate_sql(question=question, allow_llm_to_see_data=self.allow_llm_to_see_data)
-
+            
+            # 保存当前问题到缓存
+            self.cache.set(id="latest_question", field="question", value=question)
             self.cache.set(id=id, field="question", value=question)
             self.cache.set(id=id, field="sql", value=sql)
-
+            
             if vn.is_sql_valid(sql=sql):
-                return jsonify(
-                    {
-                        "type": "sql",
-                        "id": id,
-                        "text": sql,
-                    }
-                )
+                return jsonify({
+                    "type": "sql",
+                    "id": id,
+                    "text": sql,
+                })
             else:
-                return jsonify(
-                    {
-                        "type": "text",
-                        "id": id,
-                        "text": sql,
-                    }
-                )
+                return jsonify({
+                    "type": "text", 
+                    "id": id,
+                    "text": sql,
+                })
 
         @self.flask_app.route("/api/v0/generate_rewritten_question", methods=["GET"])
         @self.requires_auth
@@ -375,6 +373,9 @@ class VannaFlaskAPI:
             new_question = flask.request.args.get("new_question")
 
             rewritten_question = self.vn.generate_rewritten_question(last_question, new_question)
+            
+            # 保存重写后的问题到缓存
+            # self.cache.set(id="latest_question", field="question", value=rewritten_question)
 
             return jsonify({"type": "rewritten_question", "question": rewritten_question})
 
@@ -813,16 +814,27 @@ class VannaFlaskAPI:
                     id:
                       type: string
             """
-            question = flask.request.json.get("question")
-            sql = flask.request.json.get("sql")
+            # 从缓存获取最新问题
+            question = self.cache.get(id="latest_question", field="question")
+            # question = flask.request.json.get("question")
+            sql = flask.request.json.get("sql") 
             ddl = flask.request.json.get("ddl")
             documentation = flask.request.json.get("documentation")
+            
+            # Debug打印
+            print("Training Parameters:")
+            print(f"Question: {question}")
+            print(f"SQL: {sql}")
+            print(f"DDL: {ddl}")  
+            print(f"Documentation: {documentation}")
 
             try:
                 id = vn.train(
-                    question=question, sql=sql, ddl=ddl, documentation=documentation
+                    question=question,
+                    sql=sql,
+                    ddl=ddl,
+                    documentation=documentation
                 )
-
                 return jsonify({"id": id})
             except Exception as e:
                 print("TRAINING ERROR", e)

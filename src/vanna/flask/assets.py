@@ -12,7 +12,16 @@ html_content = '''<!doctype html>
   </head>
   <body class="bg-white dark:bg-slate-900">
     <div id="app"></div>
-    
+    <div style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000;">
+      <a href="http://localhost:8084/schema_select" 
+         style="display: inline-block; padding: 8px 16px; 
+                background-color: #0d6efd; color: white; 
+                text-decoration: none; border-radius: 4px;
+                font-family: system-ui, -apple-system, sans-serif;
+                font-size: 14px;">
+        选择模型
+      </a>
+    </div>
   </body>
 </html>
 '''
