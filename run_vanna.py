@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, 'D:/github/vanna/src')
+sys.path.insert(0, 'D:/github/vanna/src') # remove if you have a differen path for vanna
 
 try:
     from vanna.openai import OpenAI_Chat
