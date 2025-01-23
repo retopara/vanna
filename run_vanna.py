@@ -5,6 +5,8 @@ try:
     from vanna.openai import OpenAI_Chat
     from vanna.chromadb import ChromaDB_VectorStore
     import yaml  # 添加 yaml 导入
+    from vanna.qianwen import QianWenAI_Embeddings
+    from openai import OpenAI
 except ImportError as e:
     print(f"导入错误: {e}")
     print("请确保已安装所需的包：")
@@ -30,23 +32,62 @@ try:
         config['openai'] = {}
     config['openai']['api_key'] = api_secret['openai']['api_key']
     
+    # 添加千问API密钥
+    if 'qianwen' not in config:
+        config['qianwen'] = {}
+    config['qianwen']['api_key'] = api_secret['qianwen']['api_key']
+    
+    # 添加 deepseek 配置
+    if 'deepseek' not in config:
+        config['deepseek'] = {}
+    # 从 api_secret.yaml 读取 API 密钥
+    config['deepseek']['api_key'] = api_secret['deepseek']['api_key']
+    # 确保其他 deepseek 配置项存在
+    if 'model' not in config['deepseek']:
+        config['deepseek']['model'] = 'deepseek-chat'
+    if 'base_url' not in config['deepseek']:
+        config['deepseek']['base_url'] = 'https://api.deepseek.com'
+    if 'temperature' not in config['deepseek']:
+        config['deepseek']['temperature'] = 0.7
+    
+    print("成功加载 deepseek 配置:")
+    print(f"- Model: {config['deepseek']['model']}")
+    print(f"- Base URL: {config['deepseek']['base_url']}")
+    print(f"- Temperature: {config['deepseek']['temperature']}")
+    
 except Exception as e:
     print(f"读取配置文件失败: {e}")
     sys.exit(1)
 
-class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
+# 初始化 deepseek 客户端
+deepseek_client = OpenAI(
+    api_key=config['deepseek']['api_key'],
+    base_url=config['deepseek']['base_url']
+)
+
+class MyVanna(ChromaDB_VectorStore, OpenAI_Chat, QianWenAI_Embeddings):
     def __init__(self, config=None):
         ChromaDB_VectorStore.__init__(self, config=config)
-        OpenAI_Chat.__init__(self, config=config)
+        OpenAI_Chat.__init__(self, client=deepseek_client, config=config)  # 使用 deepseek 客户端
+        QianWenAI_Embeddings.__init__(self, config=config)
         
     def search_tables_metadata(self, query: str) -> list:
         """搜索表元数据的方法"""
         return []
-
+    
 # 初始化 Vanna 实例
 vn = MyVanna(config={
-    'api_key': config['openai']['api_key'],  # 使用合并后的配置中的API密钥
-    'model': config['openai']['model']       # 使用主配置文件中的模型设置
+    'api_key': config['openai']['api_key'],
+    'model': config['deepseek']['model'],
+    'qianwen_api_key': config['qianwen']['api_key'],
+    'embedding_model': config['embedding']['model'],
+    'base_url': config['embedding']['base_url'],
+    'deepseek': {
+        'api_key': config['deepseek']['api_key'],
+        'model': config['deepseek']['model'],
+        'base_url': config['deepseek']['base_url'],
+        'temperature': config['deepseek']['temperature']
+    }
 })
 
 # 连接到 PostgreSQL 数据库

@@ -1,6 +1,10 @@
 openai:
   model: "gpt-4o-mini"  # 默认模型设置
 
+embedding:
+  model: "text-embedding-v3"
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
 database:
   host: "localhost"
   dbname: "postgres"
@@ -8,3 +12,8 @@ database:
   password: "postgres"
   port: "5431" 
   schema: ""
+
+deepseek:
+  model: "deepseek-reasoner"
+  base_url: "https://api.deepseek.com"
+  temperature: 0.7
